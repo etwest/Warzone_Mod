@@ -1,63 +1,42 @@
 require('Utilities');
 
--- function Server_AdvanceTurn_Order(game, order, result, skipThisOrder, addNewOrder)
---     if (order.proxyType == 'GameOrderCustom' and startsWith(order.Payload, 'GiftArmies_')) then  --look for the order that we inserted in Client_PresentMenuUI
+-- This part is for adjusting the number of points
+-- Thoughts: I think we want to implement the tally it up and assign points at the end
+--           method
+--           Basically, because of the Matthew vs Alicia war with Yitzhar attacking in the background.
+--           Yitzhar shouldn't get a ton of points for doing that even though he's weaker than Matthew because
+--           Matthew was at the time fighting an opponent of equivalent strength (Alicia)
+function GetPoints(attacker_killed, defender_killed, attacker_income, defender_income)
+	local income_ratio    = (defender_income / attacker_income);
+	local attacker_points = attacker_killed * income_ratio;
+	local defender_points = defender_killed / income_ratio;
 
--- 		--in Client_PresentMenuUI, we comma-delimited the number of armies, the target territory ID, and the target player ID.  Break it out here
--- 		local payloadSplit = split(string.sub(order.Payload, 12), ','); 
--- 		local numArmies = tonumber(payloadSplit[1])
--- 		local targetTerritoryID = tonumber(payloadSplit[2]);
--- 		local targetPlayerID = tonumber(payloadSplit[3]);
-
--- 		--Skip if we don't control the territory (this can happen if someone captures the territory before our gift order executes)
--- 		if (order.PlayerID ~= game.ServerGame.LatestTurnStanding.Territories[targetTerritoryID].OwnerPlayerID) then
--- 			skipThisOrder(WL.ModOrderControl.Skip);
--- 			return;
--- 		end
-
--- 		local armiesOnTerritory = game.ServerGame.LatestTurnStanding.Territories[targetTerritoryID].NumArmies.NumArmies;
-
--- 		if (numArmies < 0) then numArmies = 0 end;
--- 		if (numArmies > armiesOnTerritory) then numArmies = armiesOnTerritory end;
-
--- 		if (targetPlayerID == order.PlayerID) then  --can't gift yourself
--- 			skipThisOrder(WL.ModOrderControl.Skip);
--- 			return;
--- 		end 
-
--- 		local targetTerritories = map(filter(game.ServerGame.LatestTurnStanding.Territories, function(t) return t.OwnerPlayerID == targetPlayerID end), function(t) return t.ID; end); --find territories owned by target
--- 		if (#targetTerritories == 0) then return end; --skip if they have no territories
-
--- 		local terrMods = {};
--- 		--helper function
--- 		local modArmies = function(terrID, numArmies)
--- 			local existing = first(terrMods, function(m) return m.TerritoryID == terrID end);
--- 			if (existing ~= nil) then
--- 				existing.SetArmiesTo = existing.SetArmiesTo + numArmies;
--- 			else
--- 				local mod = WL.TerritoryModification.Create(terrID);
--- 				mod.SetArmiesTo = game.ServerGame.LatestTurnStanding.Territories[terrID].NumArmies.NumArmies + numArmies;
--- 				table.insert(terrMods, mod);
--- 			end
--- 		end
--- 		--First remove armies from the source territory
--- 		modArmies(targetTerritoryID, -numArmies);
-
--- 		--Now randomly distribute those armies on the target player's territories, one at a time.
--- 		for i=1,numArmies do
--- 			modArmies(randomFromArray(targetTerritories), 1);
--- 		end
-		
--- 		addNewOrder(WL.GameOrderEvent.Create(order.PlayerID, order.Message, {}, terrMods));
-		
-
--- 		skipThisOrder(WL.ModOrderControl.SkipAndSupressSkippedMessage); --we replaced the GameOrderCustom with a GameOrderEvent, so get rid of the custom order.  There wouldn't be any harm in leaving it there, but it adds clutter to the orders list so it's better to get rid of it.
-
--- 	end
-
--- end
+	return attacker_points, defender_points;
+end
 
 function Server_AdvanceTurn_Order(game, order, result, skipThisOrder, addNewOrder)
-	if (order.)
+	if (order.proxyType == 'GameOrderAttackTransfer') then
+		local terr_map = game.ServerGame.LatestTurnStanding.Territories;
+		local attackerID = terr_map[order.From].OwnerPlayerID;
+		local defenderID = terr_map[order.To].OwnerPlayerID;
+		local publicGameData = Mod.PublicGameData;
+		
+		if (not terr_map[order.To].IsNeutral) then
+			local attacker = game.Game.Players[attackerID];
+			local defender = game.Game.Players[defenderID];
 
+			-- So here we are ignoring the effects of santion cards. It may be prudent to change this later
+			local attacker_income = attacker.Income(0, game.ServerGame.LatestTurnStanding, false, true).Total
+			local defender_income = defender.Income(0, game.ServerGame.LatestTurnStanding, false, true).Total
+			local attacker_points, defender_points = GetPoints(result.DefendingArmiesKilled.NumArmies, result.AttackingArmiesKilled.NumArmies, attacker_income, defender_income)
+
+			publicGameData.KillInfo[attackerID] = publicGameData.KillInfo[attackerID] + attacker_points;
+			publicGameData.KillInfo[defenderID] = publicGameData.KillInfo[defenderID] + defender_points;
+			print("attacker kills total =", publicGameData.KillInfo[attackerID])
+			print("defender kills total =", publicGameData.KillInfo[defenderID])
+		end
+
+		-- write any changes we've made back to the PublicGameData
+		Mod.PublicGameData = publicGameData;
+	end
 end

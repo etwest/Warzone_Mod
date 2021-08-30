@@ -1,83 +1,47 @@
 require('Utilities');
 
 function Client_PresentMenuUI(rootParent, setMaxSize, setScrollable, game)
-	Game = game;
 	SubmitBtn = nil;
 
 	setMaxSize(450, 280);
 
 	vert = UI.CreateVerticalLayoutGroup(rootParent);
+	local row = UI.CreateHorizontalLayoutGroup(vert);
+	UI.CreateLabel(row).SetText("Players ordered by their current scores:")
 
-	if (game.Us == nil) then
-		UI.CreateLabel(vert).SetText("You cannot gift armies since you're not in the game");
-		return;
+	-- get the players, ordered by points
+	local player_by_points = get_player_order(game);
+
+	-- display the current order of players
+	-- We might want to think about what the actual best information to display is
+	-- Ideas:
+	--   Display the current position of player and appoximate score (factor in incomes or no?)
+	-- Main problem is I don't want to give away information about income too much or really at all.
+	-- Keeping that a mystery is part of the fun I think.
+	-- I think its part of the skill of the game to determine relative incomes and part of the diplo
+	for position, player in ipairs(player_by_points) do
+		local row = UI.CreateHorizontalLayoutGroup(vert);
+		local player_obj = game.Game.Players[player];
+		UI.CreateLabel(row).SetText(position .. ". " .. player_obj.DisplayName(nil, false))
 	end
 
-	local row1 = UI.CreateHorizontalLayoutGroup(vert);
-	UI.CreateLabel(row1).SetText("Gift armies to this player: ");
-	TargetPlayerBtn = UI.CreateButton(row1).SetText("Select player...").SetOnClick(TargetPlayerClicked);
-
-
-	local row2 = UI.CreateHorizontalLayoutGroup(vert);
-	UI.CreateLabel(row2).SetText("Gift armies from this territory: ");
-	TargetTerritoryBtn = UI.CreateButton(row2).SetText("Select source territory...").SetOnClick(TargetTerritoryClicked);
-
+	-- if (game.Us == nil) then
+	-- 	local row = UI.CreateHorizontalLayoutGroup(vert);
+	-- 	UI.CreateLabel(row).SetText("You cannot gift armies since you're not in the game");
+	-- 	return;
+	-- end
 end
 
-
-function TargetPlayerClicked()
-	local players = filter(Game.Game.Players, function (p) return p.ID ~= Game.Us.ID end);
-	local options = map(players, PlayerButton);
-	UI.PromptFromList("Select the player you'd like to give armies to", options);
-end
-function PlayerButton(player)
-	local name = player.DisplayName(nil, false);
-	local ret = {};
-	ret["text"] = name;
-	ret["selected"] = function() 
-		TargetPlayerBtn.SetText(name);
-		TargetPlayerID = player.ID;
-	end
-	return ret;
-end
-
-function TargetTerritoryClicked()
-	local options = map(filter(Game.LatestStanding.Territories, function(t) return t.OwnerPlayerID == Game.Us.ID end), TerritoryButton);
-	UI.PromptFromList("Select the territory you'd like to take armies from", options);
-end
-function TerritoryButton(terr)
-	local name = Game.Map.Territories[terr.ID].Name;
-	local ret = {};
-	ret["text"] = name;
-	ret["selected"] = function()
-		TargetTerritoryBtn.SetText(name);
-		TargetTerritoryID = terr.ID;
-
-		CheckCreateFinalStep();
-	end
-	return ret;
-end
-
-function CheckCreateFinalStep()
-	if (SubmitBtn == nil) then
-
-		local row3 = UI.CreateHorizontalLayoutGroup(vert);
-		UI.CreateLabel(row3).SetText("How many armies would you like to gift: ");
-		NumArmiesInput = UI.CreateNumberInputField(row3).SetSliderMinValue(1);
-
-		SubmitBtn = UI.CreateButton(vert).SetText("Gift").SetOnClick(SubmitClicked);
+function get_player_order(game)
+	local sorted_players = {}
+	local kill_info = Mod.PublicGameData.KillInfo;
+	for player in pairs(game.Game.Players) do
+		table.insert(sorted_players, player)
 	end
 
-	local maxArmies = Game.LatestStanding.Territories[TargetTerritoryID].NumArmies.NumArmies;
-	NumArmiesInput.SetSliderMaxValue(maxArmies).SetValue(maxArmies);
-end
+	table.sort(sorted_players, function(a, b)
+		return kill_info[a] < kill_info[b]
+	end)
 
-function SubmitClicked()
-	local msg = 'Gifting ' .. NumArmiesInput.GetValue() .. ' armies from ' .. Game.Map.Territories[TargetTerritoryID].Name .. ' to ' .. Game.Game.Players[TargetPlayerID].DisplayName(nil, false);
-
-	local payload = 'GiftArmies_' .. NumArmiesInput.GetValue() .. ',' .. TargetTerritoryID .. ',' .. TargetPlayerID;
-
-	local orders = Game.Orders;
-	table.insert(orders, WL.GameOrderCustom.Create(Game.Us.ID, msg, payload));
-	Game.Orders = orders;
+	return sorted_players
 end
