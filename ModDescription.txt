@@ -1,3 +1,3 @@
-Allows players to gift armies to another player, friend or foe.  Armies you give will be distributed to random territories throughout the opponent's empire.
+Applies a turn limit to a game of Warzone and calculates the winner of the game at the end of the turns to be the player with the most income and points from wars.
 
-To use it, select Gift Armies from the game's menu, select a territory you wish to give armies from, how many armies to give, and which player you wish to give them to.
+Points are gained by killing armies and are weighted by the strength of the players. This encourages players of equal strength to fight one another and keeps games among friends from becoming a game of avoiding conflict.

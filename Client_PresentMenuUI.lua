@@ -34,7 +34,7 @@ end
 
 function get_player_order(game)
 	local sorted_players = {}
-	local kill_info = Mod.PublicGameData.KillInfo;
+	local kill_info = Mod.PublicGameData.KillPoints;
 	for player in pairs(game.Game.Players) do
 		table.insert(sorted_players, player)
 	end
