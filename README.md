@@ -2,6 +2,6 @@
 A set of Warzone Mods
 
 # Contributors
-etwest
-graytmatter
-jraizes
+- etwest
+- graytmatter
+- jraizes
