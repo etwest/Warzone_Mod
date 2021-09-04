@@ -65,8 +65,8 @@ function Server_AdvanceTurn_End(game, addNewOrder)
 	Mod.PublicGameData = publicGameData; -- write to PublicGameData
 
 	-- check if we should end the game
-	print(game.ServerGame.Game.NumberOfTurns)
-	if game.ServerGame.Game.NumberOfTurns >= Mod.Settings.NumTurns then
+	print(game.ServerGame.Game.NumberOfLogicalTurns)
+	if game.ServerGame.Game.NumberOfLogicalTurns >= Mod.Settings.NumTurns then
 		end_game(game, addNewOrder)
 	end
 end
@@ -94,12 +94,13 @@ function get_points(attacker_killed, defender_killed, attacker_income, defender_
 	return attacker_points, defender_points;
 end
 
-function end_game(game, addNewOrder, incomes)
+function end_game(game, addNewOrder)
 	-- loop through all players and calculate the number of points they have
 	-- this includes kill_points and current income
 	-- temporarily we will just add these together to determine the winner
 	local killPoints    = Mod.PublicGameData.KillPoints;
 	local total_points  = Mod.PublicGameData.KillPoints;
+	local incomes       = {};
 	local income_points = {};
 	local player_ids    = {};
 	local standing      = game.ServerGame.LatestTurnStanding
@@ -110,6 +111,7 @@ function end_game(game, addNewOrder, incomes)
 	-- have changed dramatically in this last turn
 	for id, player in pairs(game.Game.Players) do
 		local player_income = player.Income(0, standing, false, true).Total;
+		incomes[id]         = player_income;
 		income_points[id]   = player_income * Mod.Settings.NumTurns / 4;
 		total_points[id]    = total_points[id] + income_points[id];
 		table.insert(player_ids, id);
@@ -123,8 +125,10 @@ function end_game(game, addNewOrder, incomes)
 
 	-- for each player display their total points
 	for position, player in pairs(player_ids) do
-		local msg_string = position .. ". " .. game.Game.Players[player].DisplayName(nil, false);
-		msg_string = msg_string .. " got " .. killPoints[player] .. " points from combat and " 
+		local msg_string = position .. ". " .. game.Game.Players[player].DisplayName(nil, false) .. "\n";
+		msg_string = msg_string .. "Total Points = " .. total_points[player] .. "\n"
+		msg_string = msg_string .. "End of Game Income = " .. incomes[player] .. "\n"
+		msg_string = msg_string .. "Got " .. killPoints[player] .. " points from combat and " 
 		msg_string = msg_string .. income_points[player] .. " from end of game income."
 		addNewOrder(WL.GameOrderEvent.Create(player, msg_string, nil, {}));
 	end
