@@ -13,13 +13,14 @@ function Client_PresentConfigureUI(rootParent)
 		DisplayOrder = false;
 	end
 
+	vrt = UI.CreateVerticalLayoutGroup(rootParent)
+
 	-- Ask user to configure the number of turns
-	row = UI.CreateHorizontalLayoutGroup(rootParent)
+	row = UI.CreateHorizontalLayoutGroup(vrt)
 	UI.CreateLabel(row).SetText('Turn Limit: ')
 	inputNumTurns = UI.CreateNumberInputField(row).SetSliderMinValue(5).SetSliderMaxValue(30).SetValue(NumTurns)
 
 	-- Ask user to configure the amount of available information
-	vrt = UI.CreateVerticalLayoutGroup(rootParent)
 	UI.CreateLabel(vrt).SetText('Should the Following Be Displayed In Game?')
 	inputDisplayScore = UI.CreateCheckBox(vrt).SetIsChecked(DisplayScore).SetText("Player's approximate score");
 	inputDisplayOrder = UI.CreateCheckBox(vrt).SetIsChecked(DisplayOrder).SetText('Ordering of players by combat score');
