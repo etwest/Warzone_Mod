@@ -3,6 +3,7 @@ require('Utilities');
 function Server_AdvanceTurn_Order(game, order, result, skipThisOrder, addNewOrder)
 	if (order.proxyType == 'GameOrderAttackTransfer') then
 		local terr_map = game.ServerGame.LatestTurnStanding.Territories;
+		printGameOrderAttackTransfer(order, result, terr_map, game.ServerGame.Game.Players)
 		
 		-- Don't get points for fighting neutral or transfers
 		if (terr_map[order.To].IsNeutral or not result.IsAttack) then
@@ -15,8 +16,8 @@ function Server_AdvanceTurn_Order(game, order, result, skipThisOrder, addNewOrde
 		local publicGameData = Mod.PublicGameData;
 		
 		-- write the number of armies lost through this attack to LostArmiesFrom and TotalLosses
-		publicGameData.TotalLosses[attackerID] = publicGameData.TotalLosses[attackerID] + result.DefendingArmiesKilled.NumArmies;
-		publicGameData.TotalLosses[defenderID] = publicGameData.TotalLosses[defenderID] + result.AttackingArmiesKilled.NumArmies;
+		publicGameData.TotalLosses[attackerID] = publicGameData.TotalLosses[attackerID] + result.AttackingArmiesKilled.NumArmies;
+		publicGameData.TotalLosses[defenderID] = publicGameData.TotalLosses[defenderID] + result.DefendingArmiesKilled.NumArmies;
 		publicGameData.LostArmiesFrom[defenderID][attackerID] = publicGameData.LostArmiesFrom[defenderID][attackerID] + result.DefendingArmiesKilled.NumArmies;
 		publicGameData.LostArmiesFrom[attackerID][defenderID] = publicGameData.LostArmiesFrom[attackerID][defenderID] + result.AttackingArmiesKilled.NumArmies;
 		Mod.PublicGameData = publicGameData;
@@ -29,47 +30,55 @@ function Server_AdvanceTurn_End(game, addNewOrder)
 	local totalLosses    = publicGameData.TotalLosses;
 	local lostArmiesFrom = publicGameData.LostArmiesFrom;
 	local incomes        = {};
-	local min_kills      = 10; -- minimum kills needed to be counted for combat
 
 	for id, player in pairs(game.Game.Players) do
 		incomes[id] = player.Income(0, game.ServerGame.PreviousTurnStanding, false, true).Total;
 	end
 
-	for player, total_loss in pairs(totalLosses) do
-		-- calculate the total income that fought this player
-		-- TODO: currently all this does is assign points based on attacks
-		-- another idea would be to try to figure out the income on both sides of a 'war'
-		-- then we probably need to define what a 'war' is
-		local total_income = 0;
-		for oth_player, kills in pairs(lostArmiesFrom[player]) do
-			if kills > min_kills then
-				total_income = total_income + incomes[oth_player];
-			else
-				totalLosses[oth_player] = totalLosses[oth_player] - kills; -- don't count these kills for points
-			end
-		end
-		-- assign points to each player that dealt damage to this player
-		for oth_player, kills in pairs(lostArmiesFrom[player]) do
-			if kills > min_kills then 
-				-- temporary code for calculating points. Just use number of kills
-				publicGameData.KillPoints[oth_player] = publicGameData.KillPoints[oth_player] + kills
-				print("kills by player " .. oth_player .. ": " .. publicGameData.KillPoints[oth_player])
+	for player1, total_loss1 in pairs(totalLosses) do
+		for player2, total_loss2 in pairs(totalLosses) do
+			if not (player1 == player2) and lostArmiesFrom[player1][player2] > 0 then
+				local p1_kills = lostArmiesFrom[player2][player1]
+				local p2_kills = lostArmiesFrom[player1][player2]
+
+				print('checking points for combat between: ' .. player1 .. ' and ' .. player2)
+				-- assign points to player1 weighted by the incomes of the player attacking 1 vs 2
+				local p1_side_income = 0; -- the incomes of players that attacked p2
+				local p2_side_income = 0; -- the incomes of players that attacked p1
+				for oth_player, kills in pairs(lostArmiesFrom[player2]) do
+					print('damaged p2: ' .. oth_player .. ': ' .. kills .. '/' .. total_loss2 .. '*' .. incomes[oth_player])
+					p1_side_income = p1_side_income + (kills/total_loss2) * incomes[oth_player];
+				end
+				for oth_player, kills in pairs(lostArmiesFrom[player1]) do
+					print('damaged p1: ' .. oth_player .. ': ' .. kills .. '/' .. total_loss1 .. '*' .. incomes[oth_player])
+					p2_side_income = p2_side_income + (kills/total_loss1) * incomes[oth_player];
+				end
+
+				print('p1_side_income: ' .. p1_side_income)
+				print('p2_side_income: ' .. p2_side_income)
+
+				p1_points, p2_points = get_points(p1_kills, p2_kills, p1_side_income, p2_side_income)
+				-- TODO: this could be improved by utilizing the p2_points as well (requires changing second for loop)
+				publicGameData.KillPoints[player1] = publicGameData.KillPoints[player1] + p1_points
 			end
 		end
 	end
-
-	-- assign points for armies killed
-	-- local attacker_points, defender_points = GetPoints(result.DefendingArmiesKilled.NumArmies, result.AttackingArmiesKilled.NumArmies, attacker_income, defender_income)
 
 	empty_lost_info(publicGameData); -- reset TotalLosses and LostArmiesFrom
 	Mod.PublicGameData = publicGameData; -- write to PublicGameData
 
 	-- check if we should end the game
 	print(game.ServerGame.Game.NumberOfLogicalTurns)
-	if game.ServerGame.Game.NumberOfLogicalTurns >= Mod.Settings.NumTurns then
+	print(game.ServerGame.Game.NumberOfTurns)
+	if game.ServerGame.Game.NumberOfLogicalTurns >= Mod.Settings.NumTurns - 1 then
 		end_game(game, addNewOrder)
 	end
 end
+
+-- for each pair of players
+ 	-- if at war
+	  -- figure out income that attacked player A and income that attacked player B
+	  -- weight each of their kills by get_points function.
 
 function empty_lost_info(publicGameData)
 	for player in pairs(publicGameData.TotalLosses) do 
@@ -90,7 +99,7 @@ function get_points(attacker_killed, defender_killed, attacker_income, defender_
 	local income_ratio    = (defender_income / attacker_income);
 	local attacker_points = attacker_killed * income_ratio;
 	local defender_points = defender_killed / income_ratio;
-
+	print('attacker_points = ' .. attacker_points);
 	return attacker_points, defender_points;
 end
 
@@ -103,7 +112,7 @@ function end_game(game, addNewOrder)
 	local incomes       = {};
 	local income_points = {};
 	local player_ids    = {};
-	local standing      = game.ServerGame.LatestTurnStanding
+	local standing      = game.ServerGame.LatestTurnStanding;
 
 	print("ENDING game and assigning winner")
 

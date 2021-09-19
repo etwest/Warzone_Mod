@@ -78,3 +78,19 @@ end
 function startsWith(str, sub)
 	return string.sub(str, 1, string.len(sub)) == sub;
 end
+
+function printGameOrderAttackTransfer(order, result, terr_map, players)
+	if terr_map[order.To].IsNeutral then
+		return
+	end
+
+	-- If this isn't an attack on neutral than print it
+	local attackerID = terr_map[order.From].OwnerPlayerID;
+	local defenderID = terr_map[order.To].OwnerPlayerID;
+
+	local attacker_name = players[attackerID].DisplayName(nil, false)
+	local defender_name = players[defenderID].DisplayName(nil, false)
+
+	print(attacker_name .. ' sent ' .. result.ActualArmies.NumArmies .. ' to attack/transfer ' .. defender_name)
+
+end

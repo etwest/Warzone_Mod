@@ -7,6 +7,6 @@ function Client_PresentConfigureUI(rootParent)
 
 	-- Ask user to configure the number of turns
 	row = UI.CreateHorizontalLayoutGroup(rootParent)
-	UI.CreateLabel(row).SetText('How many turns should the game last')
+	UI.CreateLabel(row).SetText('Enter the number of turns the game will last: ')
 	inputNumTurns = UI.CreateNumberInputField(row).SetSliderMinValue(5).SetSliderMaxValue(30).SetValue(NumTurns)
 end
