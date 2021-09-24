@@ -15,19 +15,20 @@ function Server_AdvanceTurn_Order(game, order, result, skipThisOrder, addNewOrde
 		local defenderID = terr_map[order.To].OwnerPlayerID;
 		local publicGameData = Mod.PublicGameData;
 		
-		-- write the number of armies lost through this attack to LostArmiesFrom and TotalLosses
-		publicGameData.TotalLosses[attackerID] = publicGameData.TotalLosses[attackerID] + result.AttackingArmiesKilled.NumArmies;
-		publicGameData.TotalLosses[defenderID] = publicGameData.TotalLosses[defenderID] + result.DefendingArmiesKilled.NumArmies;
+		-- write the number of armies lost through this attack to LostArmiesFrom
 		publicGameData.LostArmiesFrom[defenderID][attackerID] = publicGameData.LostArmiesFrom[defenderID][attackerID] + result.DefendingArmiesKilled.NumArmies;
 		publicGameData.LostArmiesFrom[attackerID][defenderID] = publicGameData.LostArmiesFrom[attackerID][defenderID] + result.AttackingArmiesKilled.NumArmies;
 		Mod.PublicGameData = publicGameData;
+		-- print('LostArmiesFrom[attacker][defender] = ' .. publicGameData.LostArmiesFrom[attackerID][defenderID])
+		-- print('LostArmiesFrom[defender][attacker] = ' .. publicGameData.LostArmiesFrom[defenderID][attackerID])
 	end
 end
 
 function Server_AdvanceTurn_End(game, addNewOrder)
+	-- print("ENDING TURN: " .. game.ServerGame.Game.NumberOfLogicalTurns + 1)
+
 	-- local variables
 	local publicGameData = Mod.PublicGameData;
-	local totalLosses    = publicGameData.TotalLosses;
 	local lostArmiesFrom = publicGameData.LostArmiesFrom;
 	local incomes        = {};
 
@@ -35,8 +36,12 @@ function Server_AdvanceTurn_End(game, addNewOrder)
 		incomes[id] = player.Income(0, game.ServerGame.PreviousTurnStanding, false, true).Total;
 	end
 
-	for player1, total_loss1 in pairs(totalLosses) do
-		for player2, total_loss2 in pairs(totalLosses) do
+	-- for each pair of players
+	 	-- if at war
+		  -- figure out income that attacked player A and income that attacked player B
+		  -- weight each of their kills by get_points function.
+	for player1, attacked_by in pairs(lostArmiesFrom) do
+		for player2, _ in pairs(attacked_by) do
 			if not (player1 == player2) and lostArmiesFrom[player1][player2] > 0 then
 				local p1_kills = lostArmiesFrom[player2][player1];
 				local p2_kills = lostArmiesFrom[player1][player2];
@@ -45,13 +50,26 @@ function Server_AdvanceTurn_End(game, addNewOrder)
 				-- assign points to player1 weighted by the incomes of the player attacking 1 vs 2
 				local p1_side_income = 0; -- the incomes of players that attacked p2
 				local p2_side_income = 0; -- the incomes of players that attacked p1
+				local max_p1_side_kills = 0;
+				local max_p2_side_kills = 0;
+				for _, kills in pairs(lostArmiesFrom[player2]) do
+					if kills > max_p1_side_kills then
+						max_p1_side_kills = kills
+					end
+				end
 				for oth_player, kills in pairs(lostArmiesFrom[player2]) do
-					-- print('damaged p2: ' .. oth_player .. ': ' .. kills .. '/' .. total_loss2 .. '*' .. incomes[oth_player]);
-					p1_side_income = p1_side_income + (kills/total_loss2) * incomes[oth_player];
+					-- print('damaged p2: ' .. oth_player .. ': ' .. kills .. '/' .. max_p1_side_kills .. '*' .. incomes[oth_player]);
+					p1_side_income = p1_side_income + (kills/max_p1_side_kills) * incomes[oth_player];
+				end
+
+				for _, kills in pairs(lostArmiesFrom[player1]) do
+					if kills > max_p2_side_kills then
+						max_p2_side_kills = kills
+					end
 				end
 				for oth_player, kills in pairs(lostArmiesFrom[player1]) do
-					-- print('damaged p1: ' .. oth_player .. ': ' .. kills .. '/' .. total_loss1 .. '*' .. incomes[oth_player]);
-					p2_side_income = p2_side_income + (kills/total_loss1) * incomes[oth_player];
+					-- print('damaged p1: ' .. oth_player .. ': ' .. kills .. '/' .. max_p2_side_kills .. '*' .. incomes[oth_player]);
+					p2_side_income = p2_side_income + (kills/max_p2_side_kills) * incomes[oth_player];
 				end
 
 				-- print('p1_side_income: ' .. p1_side_income);
@@ -65,67 +83,28 @@ function Server_AdvanceTurn_End(game, addNewOrder)
 		end
 	end
 
-	empty_lost_info(publicGameData); -- reset TotalLosses and LostArmiesFrom
-	Mod.PublicGameData = publicGameData; -- write to PublicGameData
-
-	-- check if we should end the game
-	if game.ServerGame.Game.NumberOfLogicalTurns >= Mod.Settings.NumTurns - 1 then
-		end_game(game, addNewOrder)
-	end
-end
-
--- for each pair of players
- 	-- if at war
-	  -- figure out income that attacked player A and income that attacked player B
-	  -- weight each of their kills by get_points function.
-
-function empty_lost_info(publicGameData)
-	for player in pairs(publicGameData.TotalLosses) do 
-		publicGameData.TotalLosses[player] = 0;
-		for oth_player in pairs(publicGameData.LostArmiesFrom[player]) do 
-			publicGameData.LostArmiesFrom[player][oth_player] = 0;
-		end
-	end
-end
-
--- This part is for adjusting the number of points
--- Thoughts: I think we want to implement the tally it up and assign points at the end
---           method
---           Basically, because of the Matthew vs Alicia war with Yitzhar attacking in the background.
---           Yitzhar shouldn't get a ton of points for doing that even though he's weaker than Matthew because
---           Matthew was at the time fighting an opponent of equivalent strength (Alicia)
-function get_points(attacker_killed, defender_killed, attacker_income, defender_income)
-	local income_ratio    = (defender_income / attacker_income);
-	local attacker_points = attacker_killed * income_ratio;
-	local defender_points = defender_killed / income_ratio;
-	-- print('attacker_points = ' .. attacker_points);
-	return attacker_points, defender_points;
-end
-
-function end_game(game, addNewOrder)
+	-- print the current points to game history
 	-- loop through all players and calculate the number of points they have
 	-- this includes kill_points and current income
-	-- temporarily we will just add these together to determine the winner
-	local killPoints    = Mod.PublicGameData.KillPoints;
-	local total_points  = Mod.PublicGameData.KillPoints;
+	-- we will just add these together to determine the winner
+	local killPoints    = publicGameData.KillPoints;
+	local total_points  = {};
 	local incomes       = {};
 	local income_points = {};
 	local player_ids    = {};
 	local standing      = game.ServerGame.LatestTurnStanding;
 
-	print("ENDING game and assigning winner")
-
 	-- We need to recalculate the current incomes because that may
-	-- have changed dramatically in this last turn
+	-- have changed dramatically in this turn
 	for id, player in pairs(game.Game.Players) do
 		if player.State == 3 or player.Surrendered then -- if player is eliminated or surrendered then their income is 0
 			incomes[id] = 0;
 		else
-			local player_income = player.Income(0, standing, false, true).Total;
+			local player_income = player.Income(0, standing, false, false).Total;
 			incomes[id]         = player_income;
 		end
 		income_points[id]   = incomes[id] * Mod.Settings.NumTurns / 4;
-		total_points[id]    = total_points[id] + income_points[id];
+		total_points[id]    = killPoints[id] + income_points[id];
 		table.insert(player_ids, id);
 	end
 
@@ -135,22 +114,65 @@ function end_game(game, addNewOrder)
 		return total_points[a] > total_points[b]
 	end)
 
-	-- for each player display their total points
+	-- for each player save their total points for referencing later
+	local points_data = {}
 	for position, player in pairs(player_ids) do
 		local msg_string = position .. ". " .. game.Game.Players[player].DisplayName(nil, false) .. "\n";
 		msg_string = msg_string .. "Total Points = " .. string.format("%.3f", total_points[player]) .. "\n"
-		msg_string = msg_string .. "Got " .. string.format("%.3f", killPoints[player]) .. " points from combat and " 
-		msg_string = msg_string .. string.format("%.3f", income_points[player]) .. " from end of game income."
-		addNewOrder(WL.GameOrderEvent.Create(player, msg_string, nil, {}));
+		msg_string = msg_string .. "Has " .. string.format("%.3f", killPoints[player]) .. " points from combat and " 
+		msg_string = msg_string .. string.format("%.3f", income_points[player]) .. " from end of turn income."
+		points_data[position] = msg_string;
 	end
+	table.insert(publicGameData.PointsList, points_data);
 
-	-- declare a winner and assign all territories to them
-	-- winner is first id from player_ids
-	local winner_takes_all = {}
-	for _, territory in pairs(standing.Territories) do
-		local territory_mod = WL.TerritoryModification.Create(territory.ID);
-		territory_mod.SetOwnerOpt = player_ids[1]; -- lua indexes by 1
-		table.insert(winner_takes_all, territory_mod);
+	empty_lost_info(publicGameData); -- reset TotalLosses and LostArmiesFrom
+	Mod.PublicGameData = publicGameData; -- write to PublicGameData
+
+	if game.ServerGame.Game.NumberOfLogicalTurns >= Mod.Settings.NumTurns - 1 then
+		-- for each player display their total points publicly
+		for position, player in pairs(player_ids) do
+			local msg_string = position .. ". " .. game.Game.Players[player].DisplayName(nil, false) .. "\n";
+			msg_string = msg_string .. "Total Points = " .. string.format("%.3f", total_points[player]) .. "\n"
+			msg_string = msg_string .. "Has " .. string.format("%.3f", killPoints[player]) .. " points from combat and " 
+			msg_string = msg_string .. string.format("%.3f", income_points[player]) .. " from end of turn income."
+			addNewOrder(WL.GameOrderEvent.Create(player, msg_string, nil, {}));
+		end
+		-- declare a winner and assign all territories to them
+		-- winner is first id from player_ids
+		local winner_takes_all = {}
+		for _, territory in pairs(standing.Territories) do
+			local territory_mod = WL.TerritoryModification.Create(territory.ID);
+			territory_mod.SetOwnerOpt = player_ids[1]; -- lua indexes by 1
+			table.insert(winner_takes_all, territory_mod);
+		end
+		addNewOrder(WL.GameOrderEvent.Create(player_ids[1], "Wins the game!", nil, winner_takes_all));
 	end
-	addNewOrder(WL.GameOrderEvent.Create(player_ids[1], "Wins the game!", nil, winner_takes_all));
+	-- print('\n\nNew TURN')
+end
+
+function empty_lost_info(publicGameData)
+	for player, attacked_by in pairs(publicGameData.LostArmiesFrom) do 
+		for oth_player in pairs(attacked_by) do 
+			publicGameData.LostArmiesFrom[player][oth_player] = 0;
+		end
+	end
+end
+
+-- Return the amount of points to be assigned to the attacker and defender
+function get_points(attacker_killed, defender_killed, attacker_income, defender_income)
+	-- this is one approach in which only the one with more income is 'punished'
+	-- another approach would be to take the square root
+	local income_ratio = defender_income / attacker_income;
+	local attacker_ratio = income_ratio;
+	local defender_ratio = income_ratio;
+	if (attacker_income > defender_income) then
+		defender_ratio = 1;
+	else
+		attacker_ratio = 1;
+	end
+	
+	local attacker_points = attacker_killed * attacker_ratio;
+	local defender_points = defender_killed / defender_ratio;
+	-- print('attacker_points = ' .. attacker_points);
+	return attacker_points, defender_points;
 end

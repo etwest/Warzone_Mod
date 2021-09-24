@@ -5,10 +5,9 @@ function Server_StartGame(game, standing)
 	local publicGameData = Mod.PublicGameData
 	publicGameData.KillPoints     = {};
 	publicGameData.LostArmiesFrom = {};
-	publicGameData.TotalLosses    = {};
+	publicGameData.PointsList     = {};
 	for player in pairs(game.ServerGame.Game.Players) do 
 		publicGameData.KillPoints[player]     = 0;
-		publicGameData.TotalLosses[player]    = 0;
 		publicGameData.LostArmiesFrom[player] = {};
 		for oth_player in pairs(game.ServerGame.Game.Players) do
 			if not (player == oth_player) then

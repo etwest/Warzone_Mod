@@ -1,7 +1,7 @@
 function Client_SaveConfigureUI(alert)
 	Mod.Settings.NumTurns = inputNumTurns.GetValue();
-	Mod.Settings.DisplayScore = inputDisplayScore.GetIsChecked();
-	Mod.Settings.DisplayOrder = inputDisplayScore.GetIsChecked();
+	Mod.Settings.DisplayRelative = inputDisplayRelative.GetIsChecked();
+	Mod.Settings.DisplayOrder = inputDisplayOrder.GetIsChecked();
 
 	if Mod.Settings.NumTurns < 2 then
 		alert("The number of turns must be greater than or equal to 2")
