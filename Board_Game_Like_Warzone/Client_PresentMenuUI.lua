@@ -1,7 +1,13 @@
 require('Utilities');
 
 function Client_PresentMenuUI(rootParent, setMaxSize, setScrollable, game)
-	if game.Game.NumberOfLogicalTurns >= Mod.Settings.NumTurns - 1 then
+
+	if game.Game.State == 5 then -- manual distribution in progress
+		UI.CreateLabel(rootParent).SetText("Territories are currently being distributed. Check back here for points once the game begins.");
+		return;
+	end
+
+	if game.Game.State == 4 then -- the game is over
 		setMaxSize(500, 600);
 		vert = UI.CreateVerticalLayoutGroup(rootParent);
 		UI.CreateLabel(vert).SetText('The game is over. You may now view the history of points for previous turns.');
@@ -12,13 +18,17 @@ function Client_PresentMenuUI(rootParent, setMaxSize, setScrollable, game)
 				local turn_num = inputTurnNum.GetValue();
 				turn_num = turn_num - 1;
 				if turn_num < 1 then turn_num = 1; end
-				if turn_num > Mod.Settings.NumTurns then turn_num = Mod.Settings.NumTurns; end
+				if turn_num > game.Game.NumberOfTurns then turn_num = game.Game.NumberOfTurns; end
 
 				inputTurnNum.SetValue(turn_num);
 				local history_msg = "Turn " .. turn_num .. ' rankings:\n';
 				local turn_data = Mod.PublicGameData.PointsList[turn_num]
-				for position, msg in pairs(turn_data) do
-					history_msg = history_msg .. msg .. "\n";
+				if turn_data == nil then
+					history_msg = "ERROR: Don't have data for this turn :("
+				else
+					for position, msg in pairs(turn_data) do
+						history_msg = history_msg .. msg .. "\n";
+					end
 				end
 				historyLabel.SetText(history_msg);
 			end
@@ -28,13 +38,17 @@ function Client_PresentMenuUI(rootParent, setMaxSize, setScrollable, game)
 				local turn_num = inputTurnNum.GetValue();
 				turn_num = turn_num + 1;
 				if turn_num < 1 then turn_num = 1; end
-				if turn_num > Mod.Settings.NumTurns then turn_num = Mod.Settings.NumTurns; end
+				if turn_num > game.Game.NumberOfTurns then turn_num = game.Game.NumberOfTurns; end
 
 				inputTurnNum.SetValue(turn_num);
 				local history_msg = "Turn " .. turn_num .. ' rankings:\n';
-				local turn_data = Mod.PublicGameData.PointsList[turn_num]
-				for position, msg in pairs(turn_data) do
-					history_msg = history_msg .. msg .. "\n";
+				local turn_data = Mod.PublicGameData.PointsList[turn_num];
+				if turn_data == nil then
+					history_msg = "ERROR: Don't have data for this turn :("
+				else
+					for position, msg in pairs(turn_data) do
+						history_msg = history_msg .. msg .. "\n";
+					end
 				end
 				historyLabel.SetText(history_msg);
 			end
@@ -43,19 +57,23 @@ function Client_PresentMenuUI(rootParent, setMaxSize, setScrollable, game)
 			function()
 				local turn_num = inputTurnNum.GetValue();
 				local history_msg = "Turn " .. turn_num .. ' rankings:\n';
-				if turn_num < 1 or turn_num > Mod.Settings.NumTurns then
+				if turn_num < 1 or turn_num > game.Game.NumberOfTurns then
 					history_msg = history_msg .. "Invalid Turn number!";
 				else
 					local turn_data = Mod.PublicGameData.PointsList[turn_num]
-					for position, msg in pairs(turn_data) do
-						history_msg = history_msg .. msg .. "\n";
+					if turn_data == nil then
+						history_msg = "ERROR: Don't have data for this turn :("
+					else
+						for position, msg in pairs(turn_data) do
+							history_msg = history_msg .. msg .. "\n";
+						end
 					end
 				end
 					
 				historyLabel.SetText(history_msg);
 			end
 		);
-		inputTurnNum = UI.CreateNumberInputField(history_header).SetValue(1).SetSliderMinValue(1).SetSliderMaxValue(Mod.Settings.NumTurns);
+		inputTurnNum = UI.CreateNumberInputField(history_header).SetValue(1).SetSliderMinValue(1).SetSliderMaxValue(game.Game.NumberOfTurns);
 		historyLabel = UI.CreateLabel(vert);
 		return;
 	end
@@ -77,9 +95,9 @@ function Client_PresentMenuUI(rootParent, setMaxSize, setScrollable, game)
 		local p_id = player.ID
 		local income = player.Income(0, game.LatestStanding, false, true).Total
 		local kill_points = Mod.PublicGameData.KillPoints[p_id];
-		local income_points = income * Mod.Settings.NumTurns / 2;
-		kill_points = math.floor((kill_points + 5)/10) * 10;
-		income_points = math.floor((income_points + 5)/10) * 10;
+		local income_points = income * Mod.Settings.NumTurns / 4;
+		kill_points = math.floor(kill_points/5) * 5;
+		income_points = math.floor(income_points/5) * 5;
 
 		local combat_rank = 0;
 		local income_rank = 0;
@@ -117,7 +135,7 @@ function Client_PresentMenuUI(rootParent, setMaxSize, setScrollable, game)
 end
 
 function get_players_by_combat(game)
-	local sorted_players = {}
+	local sorted_players = {};
 	local kill_info = Mod.PublicGameData.KillPoints;
 	for player in pairs(game.Game.Players) do
 		table.insert(sorted_players, player);
@@ -131,33 +149,29 @@ function get_players_by_combat(game)
 end
 
 function get_players_by_income(game)
-	local sorted_players = {}
-	local incomes = {}
-	local standing = game.LatestStanding
-	for pid, player in pairs(game.Game.Players) do
-		table.insert(sorted_players, pid);
-		incomes[pid] = player.Income(0, standing, false, true).Total;
+	local sorted_players = {};
+	local income_points = Mod.PublicGameData.IncomePoints;
+	for player in pairs(game.Game.Players) do
+		table.insert(sorted_players, player);
 	end
 
 	table.sort(sorted_players, function(a, b)
-		return incomes[a] > incomes[b];
+		return income_points[a] > income_points[b];
 	end)
 
 	return sorted_players;
 end
 
 function get_players_by_points(game)
-	local sorted_players = {}
-	local incomes = {}
-	local kill_info = Mod.PublicGameData.KillPoints;
-	local standing = game.LatestStanding
-	for pid, player in pairs(game.Game.Players) do
-		table.insert(sorted_players, pid);
-		incomes[pid] = player.Income(0, standing, false, true).Total;
+	local sorted_players = {};
+	local income_points = Mod.PublicGameData.IncomePoints;
+	local kill_points = Mod.PublicGameData.KillPoints;
+	for player in pairs(game.Game.Players) do
+		table.insert(sorted_players, player);
 	end
 
 	table.sort(sorted_players, function(a, b)
-		return incomes[a] + kill_info[a] > incomes[b] + kill_info[b];
+		return income_points[a] + kill_points[a] > income_points[b] + kill_points[b];
 	end)
 
 	return sorted_players;

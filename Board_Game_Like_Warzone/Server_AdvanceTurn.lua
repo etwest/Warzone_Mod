@@ -25,7 +25,7 @@ function Server_AdvanceTurn_Order(game, order, result, skipThisOrder, addNewOrde
 end
 
 function Server_AdvanceTurn_End(game, addNewOrder)
-	-- print("ENDING TURN: " .. game.ServerGame.Game.NumberOfLogicalTurns + 1)
+	-- print("ENDING TURN: " .. game.ServerGame.Game.NumberOfTurns + 1)
 
 	-- local variables
 	local publicGameData = Mod.PublicGameData;
@@ -87,10 +87,11 @@ function Server_AdvanceTurn_End(game, addNewOrder)
 	-- loop through all players and calculate the number of points they have
 	-- this includes kill_points and current income
 	-- we will just add these together to determine the winner
-	local killPoints    = publicGameData.KillPoints;
+	local kill_points   = publicGameData.KillPoints;
+	local income_points = publicGameData.IncomePoints;
 	local total_points  = {};
 	local incomes       = {};
-	local income_points = {};
+	
 	local player_ids    = {};
 	local standing      = game.ServerGame.LatestTurnStanding;
 
@@ -104,7 +105,7 @@ function Server_AdvanceTurn_End(game, addNewOrder)
 			incomes[id]         = player_income;
 		end
 		income_points[id]   = incomes[id] * Mod.Settings.NumTurns / 4;
-		total_points[id]    = killPoints[id] + income_points[id];
+		total_points[id]    = kill_points[id] + income_points[id];
 		table.insert(player_ids, id);
 	end
 
@@ -119,21 +120,22 @@ function Server_AdvanceTurn_End(game, addNewOrder)
 	for position, player in pairs(player_ids) do
 		local msg_string = position .. ". " .. game.Game.Players[player].DisplayName(nil, false) .. "\n";
 		msg_string = msg_string .. "Total Points = " .. string.format("%.3f", total_points[player]) .. "\n"
-		msg_string = msg_string .. "Has " .. string.format("%.3f", killPoints[player]) .. " points from combat and " 
+		msg_string = msg_string .. "Has " .. string.format("%.3f", kill_points[player]) .. " points from combat and " 
 		msg_string = msg_string .. string.format("%.3f", income_points[player]) .. " from end of turn income."
 		points_data[position] = msg_string;
 	end
 	table.insert(publicGameData.PointsList, points_data);
 
 	empty_lost_info(publicGameData); -- reset TotalLosses and LostArmiesFrom
+	publicGameData.IncomePoints = income_points;
 	Mod.PublicGameData = publicGameData; -- write to PublicGameData
 
-	if game.ServerGame.Game.NumberOfLogicalTurns >= Mod.Settings.NumTurns - 1 then
+	if game.ServerGame.Game.NumberOfTurns >= Mod.Settings.NumTurns - 1 then
 		-- for each player display their total points publicly
 		for position, player in pairs(player_ids) do
 			local msg_string = position .. ". " .. game.Game.Players[player].DisplayName(nil, false) .. "\n";
 			msg_string = msg_string .. "Total Points = " .. string.format("%.3f", total_points[player]) .. "\n"
-			msg_string = msg_string .. "Has " .. string.format("%.3f", killPoints[player]) .. " points from combat and " 
+			msg_string = msg_string .. "Has " .. string.format("%.3f", kill_points[player]) .. " points from combat and " 
 			msg_string = msg_string .. string.format("%.3f", income_points[player]) .. " from end of turn income."
 			addNewOrder(WL.GameOrderEvent.Create(player, msg_string, nil, {}));
 		end
